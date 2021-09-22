@@ -5,7 +5,7 @@ using UnityEngine;
 public class Grid : MonoBehaviour {
     Node[,] grid;
 
-    public Transform player;
+    [SerializeField] private Transform player;
     [SerializeField] private Vector3 gridWorldSize;
     [SerializeField] private float nodeRadius;
     [SerializeField] private LayerMask unwalkableMask;
