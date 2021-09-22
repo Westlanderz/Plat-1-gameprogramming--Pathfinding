@@ -3,11 +3,25 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class Node {
-    public bool walkable { get; private set;}
-    public Vector3 worldPosition { get; private set;}
+    public bool walkable { get; private set; }
+    public Vector3 worldPosition { get; private set; }
+    public int gridX { get; private set; }
+    public int gridY { get; private set; }
+    public int gCost;
+    public int hCost;
 
-    public Node(bool _walkable, Vector3 _worldPosition) {
-        walkable = _walkable;
-        worldPosition = _worldPosition;
+    public int fCost {
+        get {
+            return gCost + hCost;
+        }
+    }
+
+    public Node parent;
+
+    public Node(bool walkable, Vector3 worldPosition, int gridX, int gridY) {
+        this.walkable = walkable;
+        this.worldPosition = worldPosition;
+        this.gridX = gridX;
+        this.gridY = gridY;
     }
 }
