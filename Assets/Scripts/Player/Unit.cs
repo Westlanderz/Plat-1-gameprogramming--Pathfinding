@@ -9,6 +9,7 @@ namespace OperationBlackwell.Core {
 
 		public List<Vector3> pathRoute_ { get; private set; }
 		private int pathIndex_;
+		private bool routeSet_;
 
 		private enum State {
 			Normal,
@@ -17,6 +18,8 @@ namespace OperationBlackwell.Core {
 
 		private void Awake() {
 			state_ = State.Normal;
+			pathRoute_ = new List<Vector3>();
+			routeSet_ = false;
 		}
 
 		private void Update() {
@@ -35,6 +38,7 @@ namespace OperationBlackwell.Core {
 			pathRoute_ = GridPathfinding.Instance.GetPathRoute(transform.position, targetPosition).pathVectorList;
 			if(pathRoute_.Count > 0) {
 				pathIndex_ = 0;
+				routeSet_ = true;
 			} else {
 				pathIndex_ = -1;
 				state_ = State.Normal;
@@ -44,5 +48,9 @@ namespace OperationBlackwell.Core {
 		public Vector3 GetPosition() {
 			return transform.position;
         }
+
+		public bool IsRouteSet() {
+			return routeSet_;
+		}
 	}
 }

@@ -90,6 +90,7 @@ namespace OperationBlackwell.Core {
 				case GameState.Objectives:
 					UpdateValidMovePositions();
 					SelectHero();
+					UpdateHeroArrows();
 					if(currentHero_ != null) {
 						Tilemap.Node gridObject = grid.GetGridObject(Utils.GetMouseWorldPosition());
 						if(gridObject == null) {
@@ -98,10 +99,18 @@ namespace OperationBlackwell.Core {
 						ResetArrowTool();
 						if(gridObject.GetIsValidMovePosition()) {
 							PaintArrowTool(currentHero_.GetPosition(), Utils.GetMouseWorldPosition());
+							if(Input.GetMouseButtonDown(0)) {
+								currentHero_.MoveTo(Utils.GetMouseWorldPosition());
+								currentHero_ = null;
+								ResetHeroVisual();
+							}
 						}
 					}
 					break;
 				case GameState.Executing:
+					UpdateValidMovePosition();
+					ResetArrowTool();
+					UpdateHeroArrows();
 					ResetHeroVisual();
 					break;
 				case GameState.Waiting:
@@ -152,6 +161,7 @@ namespace OperationBlackwell.Core {
 			} else if(state_ == GameState.Objectives) {
 				state_ = GameState.Executing;
 				currentHero_ = null;
+				
 			} else if(state_ == GameState.Executing) {
 				state_ = GameState.Finished;
 			}
@@ -307,6 +317,27 @@ namespace OperationBlackwell.Core {
 			}
 		}
 
+		private void UpdateValidMovePosition() {
+			moveTilemap_.SetAllTilemapSprite(
+				MovementTilemap.TilemapObject.TilemapSprite.None
+			);
+			foreach(Tilemap.Node node in grid.GetAllGridObjects()) {
+				if(node.walkable) {
+					node.SetIsValidMovePosition(true);
+					gridPathfinding.SetWalkable(node.gridX, node.gridY, true);
+					moveTilemap_.SetTilemapSprite(node.gridX, node.gridY, MovementTilemap.TilemapObject.TilemapSprite.Move);
+				} else {
+					node.SetIsValidMovePosition(false);
+					gridPathfinding.SetWalkable(node.gridX, node.gridY, false);
+				}
+			}
+			foreach(Unit hero in heroes_) {
+				Tilemap.Node gridObject = grid.GetGridObject(hero.GetPosition());
+				gridObject.SetIsValidMovePosition(true);
+				gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, true);
+			}
+		}
+
 		private void PlaceHeroes() {
 			Tilemap.Node gridObject = grid.GetGridObject(Utils.GetMouseWorldPosition());
 			if(gridObject == null || !gridObject.GetIsValidMovePosition() || gridObject.GetUnitGridCombat() != null) {
@@ -319,6 +350,7 @@ namespace OperationBlackwell.Core {
 					new Vector3(Mathf.RoundToInt(gridObject.worldPosition.x) + cellSize_ / 2, Mathf.RoundToInt(gridObject.worldPosition.y) + cellSize_ / 2), 
 					Quaternion.identity);
 				gridObject.SetUnitGridCombat(unit);
+				heroes_.Add(unit);
 				UpdateValidMovePositions();
 			}
 		}
@@ -326,7 +358,7 @@ namespace OperationBlackwell.Core {
 		private void SelectHero() {
 			ResetHeroVisual();
 			Tilemap.Node gridObject = grid.GetGridObject(Utils.GetMouseWorldPosition());
-			if(gridObject == null || gridObject.GetUnitGridCombat() == null) {
+			if(gridObject == null || gridObject.GetUnitGridCombat() == null || gridObject.GetUnitGridCombat().IsRouteSet()) {
 				return;
 			}
 			if(Input.GetMouseButtonDown(0)) {
@@ -349,6 +381,14 @@ namespace OperationBlackwell.Core {
 				unitTilemap_.SetTilemapSprite(
 					gridObject.gridX, gridObject.gridY, MovementTilemap.TilemapObject.TilemapSprite.Move
 				);
+			}
+		}
+
+		private void UpdateHeroArrows() {
+			foreach(Unit hero in heroes_) {
+				if(hero.pathRoute_.Count > 0) {
+					PaintArrowTool(hero.GetPosition(), hero.pathRoute_[hero.pathRoute_.Count - 1]);
+				}
 			}
 		}
 	}
