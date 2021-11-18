@@ -1,88 +1,108 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
-public class Grid : MonoBehaviour {
-    Node[,] grid;
+namespace OperationBlackwell.Core {
+	public class Grid<TGridObject> {
+		private readonly bool debugGrid_ = false;
+		public event EventHandler<OnGridObjectChangedEventArgs> OnGridObjectChanged;
+		public class OnGridObjectChangedEventArgs : EventArgs {
+			public int x;
+			public int y;
+		}
 
-    [SerializeField] private Transform player, targetPos;
-    [SerializeField] private Vector3 gridWorldSize;
-    [SerializeField] private float nodeRadius;
-    [SerializeField] private LayerMask unwalkableMask;
+		public int gridSizeX { get; private set; }
+		public int gridSizeY { get; private set; }
+		public float cellSize { get; private set; }
+		private Vector3 originPosition_;
+		private TGridObject[,] gridArray_;
 
-    private float nodeDiameter;
-    private int gridSizeX, gridSizeY;
+		public Grid(int gridSizeX, int gridSizeY, float cellSize, Vector3 originPosition, Func<Grid<TGridObject>, Vector3, int, int, TGridObject> createGridObject, bool drawLines = false) {
+			this.gridSizeX = gridSizeX;
+			this.gridSizeY = gridSizeY;
+			this.cellSize = cellSize;
+			this.originPosition_ = originPosition;
 
-    public List<Node> path;
+			gridArray_ = new TGridObject[gridSizeX, gridSizeY];
 
-    void Awake() {
-        nodeDiameter = nodeRadius * 2;
-        gridSizeX = Mathf.RoundToInt(gridWorldSize.x / nodeDiameter);
-        gridSizeY = Mathf.RoundToInt(gridWorldSize.y / nodeDiameter);
-        CreateGrid();
-    }
+			for(int x = 0; x < gridArray_.GetLength(0); x++) {
+				for(int y = 0; y < gridArray_.GetLength(1); y++) {
+					gridArray_[x, y] = createGridObject(this, new Vector3(x, y), x, y);
+					// Draw me some boxes.
+					if(drawLines) {
+						Utils.DrawLine(GetWorldPosition(x, y), GetWorldPosition(x, y + 1), 0.2f, 0.1f, 0.1f);
+						Utils.DrawLine(GetWorldPosition(x, y), GetWorldPosition(x + 1, y), 0.2f, 0.1f, 0.1f);
+					}
+				}
+			}	
 
-    private void CreateGrid() {
-        grid = new Node[gridSizeX, gridSizeY];
-        Vector3 worldBottomLeft = transform.position - Vector3.right * gridWorldSize.x / 2 - Vector3.forward * gridWorldSize.y / 2;
+			// Draw the outer lines too please.
+			if(drawLines) {
+				Utils.DrawLine(GetWorldPosition(0, gridSizeY), GetWorldPosition(gridSizeX, gridSizeY), 0.2f, 0.1f, 0.1f);
+				Utils.DrawLine(GetWorldPosition(gridSizeX, 0), GetWorldPosition(gridSizeX, gridSizeY), 0.2f, 0.1f, 0.1f);
+			}
+		}
 
-        for(int x = 0; x < gridSizeX; x++) {
-            for(int y = 0; y < gridSizeY; y++) {
-                Vector3 worldPoint = worldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) + Vector3.forward * (y * nodeDiameter + nodeRadius);
-                bool walkable = !(Physics.CheckSphere(worldPoint, nodeRadius, unwalkableMask));
-                grid[x, y] = new Node(walkable, worldPoint, x, y);
-            }
-        }
-    }
+		public int GetWidth() {
+			return gridSizeX;
+		}
 
-    public List<Node> GetNeighbours(Node node) {
-        List<Node> neighbours = new List<Node>();
+		public int GetHeight() {
+			return gridSizeY;
+		}
 
-        for(int x = -1; x <= 1; x++) {
-            for(int y = -1; y <= 1; y++) {
-                if(x == 0 && y == 0)
-                    continue;
+		public float GetCellSize() {
+			return cellSize;
+		}
 
-                int checkX = node.gridX + x;
-                int checkY = node.gridY + y;
+		public Vector3 GetWorldPosition(int x, int y) {
+			return new Vector3(x, y) * cellSize + originPosition_;
+		}
 
-                if(checkX >= 0 && checkX < gridSizeX && checkY >= 0 && checkY < gridSizeY)
-                    neighbours.Add(grid[checkX, checkY]);
-            }
-        }
-        return neighbours;
-    }
+		public void GetXY(Vector3 worldPosition, out int x, out int y) {
+			x = Mathf.FloorToInt((worldPosition - originPosition_).x / cellSize);
+			y = Mathf.FloorToInt((worldPosition - originPosition_).y / cellSize);
+		}
 
-    public Node NodeFromWorldPoint(Vector3 worldPosition) {
-        float percentX = (worldPosition.x + gridWorldSize.x / 2) / gridWorldSize.x;
-        float percentY = (worldPosition.z + gridWorldSize.y / 2) / gridWorldSize.y;
-        percentX = Mathf.Clamp01(percentX);
-        percentY = Mathf.Clamp01(percentY);
+		public void SetGridObject(int x, int y, TGridObject value) {
+			if(x >= 0 && y >= 0 && x < gridSizeX && y < gridSizeY) {
+				gridArray_[x, y] = value;
+				TriggerGridObjectChanged(x, y);
+			}
+		}
 
-        int x = Mathf.RoundToInt((gridSizeX - 1) * percentX);
-        int y = Mathf.RoundToInt((gridSizeY - 1) * percentY);
-        return grid[x, y];
-    }
-    
-    private void OnDrawGizmos() {
-        Gizmos.DrawWireCube(transform.position, new Vector3(gridWorldSize.x, 1, gridWorldSize.y));
+		public void TriggerGridObjectChanged(int x, int y) {
+			OnGridObjectChanged?.Invoke(this, new OnGridObjectChangedEventArgs { x = x, y = y });
+		}
 
-        Node start = NodeFromWorldPoint(player.position);
-        Node end = NodeFromWorldPoint(targetPos.position);
+		public void SetGridObject(Vector3 worldPosition, TGridObject value) {
+			GetXY(worldPosition, out int x, out int y);
+			SetGridObject(x, y, value);
+		}
 
-        if(grid != null) {
-            foreach(Node n in grid) {
-                Gizmos.color = (n.walkable) ? Color.white : Color.red;
-                if(path != null) {
-                    if(path.Contains(n))
-                        Gizmos.color = Color.cyan;
-                }
-                if(n == start)
-                    Gizmos.color = Color.yellow;
-                if(n == end)
-                    Gizmos.color = Color.blue;
-                Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
-            }
-        }
-    }
+		public TGridObject GetGridObject(int x, int y) {
+			if(x >= 0 && y >= 0 && x < gridSizeX && y < gridSizeY) {
+				return gridArray_[x, y];
+			} else {
+				return default(TGridObject);
+			}
+		}
+
+		public TGridObject GetGridObject(Vector3 worldPosition) {
+			int x, y;
+			GetXY(worldPosition, out x, out y);
+			return GetGridObject(x, y);
+		}
+
+		public List<TGridObject> GetAllGridObjects() {
+			List<TGridObject> gridObjects = new List<TGridObject>();
+			for(int x = 0; x < gridArray_.GetLength(0); x++) {
+				for(int y = 0; y < gridArray_.GetLength(1); y++) {
+					gridObjects.Add(gridArray_[x, y]);
+				}
+			}
+			return gridObjects;
+		}
+	}
 }
