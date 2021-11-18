@@ -115,6 +115,9 @@ namespace OperationBlackwell.Core {
 			if(Input.GetKeyDown(KeyCode.Return)) {
 				ChangeState();
 			}
+			if(Input.GetKeyDown(KeyCode.Backspace)) {
+				RevertState();
+			}
 			if(Input.GetKeyDown(KeyCode.R)) {
 				ResetLevel();
 			}
@@ -150,9 +153,26 @@ namespace OperationBlackwell.Core {
 				state_ = GameState.Executing;
 				currentHero_ = null;
 			} else if(state_ == GameState.Executing) {
-				state_ = GameState.Waiting;
-			} else if(state_ == GameState.Waiting) {
 				state_ = GameState.Finished;
+			}
+			OnGameStateChanged?.Invoke(this, state_);
+		}
+
+		private void RevertState() {
+			if(state_ == GameState.Obstacles) {
+				state_ = GameState.None;
+				ResetArrowTool();
+			} else if(state_ == GameState.Heroes) {
+				state_ = GameState.Obstacles;
+				ResetArrowTool();
+			} else if(state_ == GameState.Objectives) {
+				state_ = GameState.Heroes;
+				ResetArrowTool();
+			} else if(state_ == GameState.Executing) {
+				state_ = GameState.Objectives;
+				currentHero_ = null;
+			} else if(state_ == GameState.Finished) {
+				state_ = GameState.Executing;
 			}
 			OnGameStateChanged?.Invoke(this, state_);
 		}
