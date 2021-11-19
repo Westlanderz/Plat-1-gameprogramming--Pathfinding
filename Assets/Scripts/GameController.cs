@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using System;
 
 namespace OperationBlackwell.Core {
@@ -14,6 +15,7 @@ namespace OperationBlackwell.Core {
 
 		[SerializeField] private bool drawGridLines_;
 		[SerializeField] private Unit heroPrefab_;
+		[SerializeField] private Button nextStepButton_;
 
 		[SerializeField] private MovementTilemapVisual arrowTilemapVisual_;
 		[SerializeField] private MovementTilemapVisual selectorTilemapVisual_;
@@ -71,6 +73,7 @@ namespace OperationBlackwell.Core {
 			selectorTilemap_.SetTilemapVisual(selectorTilemapVisual_);
 			unitTilemap_.SetTilemapVisual(unitTilemapVisual_);
 			moveTilemap_.SetTilemapVisual(moveTilemapVisual_);
+			nextStepButton_.onClick.AddListener(UpdateHeroStep);
 			PaintMap();
 			OnGameStateChanged?.Invoke(this, state_);
 		}
@@ -97,7 +100,7 @@ namespace OperationBlackwell.Core {
 							break;
 						}
 						ResetArrowTool();
-						if(gridObject.GetIsValidMovePosition()) {
+						if(gridObject.GetIsValidMovePosition() && CheckEndPosition(Utils.GetMouseWorldPosition())) {
 							PaintArrowTool(currentHero_.GetPosition(), Utils.GetMouseWorldPosition());
 							if(Input.GetMouseButtonDown(0)) {
 								currentHero_.MoveTo(Utils.GetMouseWorldPosition());
@@ -108,14 +111,18 @@ namespace OperationBlackwell.Core {
 					}
 					break;
 				case GameState.Executing:
-					UpdateValidMovePosition();
 					ResetArrowTool();
 					UpdateHeroArrows();
-					ResetHeroVisual();
+					ResetMoveTiles();
+					if(AllHeroesFinished()) {
+						state_ = GameState.Finished;
+						OnGameStateChanged?.Invoke(this, state_);
+					}
 					break;
 				case GameState.Waiting:
 					break;
 				case GameState.Finished:
+					ResetMoveTiles();
 					break;
 				default:
 					break;
@@ -161,9 +168,6 @@ namespace OperationBlackwell.Core {
 			} else if(state_ == GameState.Objectives) {
 				state_ = GameState.Executing;
 				currentHero_ = null;
-				
-			} else if(state_ == GameState.Executing) {
-				state_ = GameState.Finished;
 			}
 			OnGameStateChanged?.Invoke(this, state_);
 		}
@@ -187,12 +191,31 @@ namespace OperationBlackwell.Core {
 			OnGameStateChanged?.Invoke(this, state_);
 		}
 
+		public GameState GetState() {
+			return state_;
+		}
+
 		private void ResetLevel() {
 			state_ = GameState.None;
 			currentHero_ = null;
 			OnGameStateChanged?.Invoke(this, state_);
 			ResetArrowTool();
 			ResetHeroVisual();
+		}
+
+		private bool CheckEndPosition(Vector3 position) {
+			Tilemap.Node gridObject = grid.GetGridObject(position);
+			if(gridObject == null) {
+				return false;
+			}
+			Tilemap.Node node;
+			foreach(Unit hero in heroes_) {
+				node = grid.GetGridObject(hero.GetTargetPosition());
+				if(node == gridObject) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		private void PaintMap() {
@@ -231,7 +254,7 @@ namespace OperationBlackwell.Core {
 					continue;
 				}
 
-				if(grid.GetGridObject(x, y).GetUnitGridCombat() != currentHero_ && grid.GetGridObject(x, y) != grid.GetGridObject(start)) {
+				if(grid.GetGridObject(x, y) != grid.GetGridObject(start)) {
 					if(grid.GetGridObject(x, y) != grid.GetGridObject(end)) {
 						if((node.parent.xPos > x || node.parent.xPos < x) && node.parent.yPos == y) {
 							arrowTilemap_.SetRotation(x, y, 90f);
@@ -311,31 +334,14 @@ namespace OperationBlackwell.Core {
 				}
 			}
 			if(currentHero_ != null) {
-				Tilemap.Node gridObject = grid.GetGridObject(currentHero_.GetPosition());
-				gridObject.SetIsValidMovePosition(true);
-				gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, true);
+				SetHeroTile(currentHero_);
 			}
 		}
 
-		private void UpdateValidMovePosition() {
+		private void ResetMoveTiles() {
 			moveTilemap_.SetAllTilemapSprite(
 				MovementTilemap.TilemapObject.TilemapSprite.None
 			);
-			foreach(Tilemap.Node node in grid.GetAllGridObjects()) {
-				if(node.walkable) {
-					node.SetIsValidMovePosition(true);
-					gridPathfinding.SetWalkable(node.gridX, node.gridY, true);
-					moveTilemap_.SetTilemapSprite(node.gridX, node.gridY, MovementTilemap.TilemapObject.TilemapSprite.Move);
-				} else {
-					node.SetIsValidMovePosition(false);
-					gridPathfinding.SetWalkable(node.gridX, node.gridY, false);
-				}
-			}
-			foreach(Unit hero in heroes_) {
-				Tilemap.Node gridObject = grid.GetGridObject(hero.GetPosition());
-				gridObject.SetIsValidMovePosition(true);
-				gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, true);
-			}
 		}
 
 		private void PlaceHeroes() {
@@ -384,12 +390,59 @@ namespace OperationBlackwell.Core {
 			}
 		}
 
+		private void SetHeroTile(Unit hero) {
+			Tilemap.Node gridObject = grid.GetGridObject(hero.GetPosition());
+			gridObject.SetIsValidMovePosition(true);
+			gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, true);
+		}
+
+		public void ResetHeroTile(Unit hero) {
+			Tilemap.Node gridObject = grid.GetGridObject(hero.GetPosition());
+			gridObject.SetIsValidMovePosition(false);
+			gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, false);
+			UpdateValidMovePositions();
+			ResetMoveTiles();
+		}
+
 		private void UpdateHeroArrows() {
+			Tilemap.Node gridObject;
 			foreach(Unit hero in heroes_) {
 				if(hero.pathRoute_.Count > 0) {
-					PaintArrowTool(hero.GetPosition(), hero.pathRoute_[hero.pathRoute_.Count - 1]);
+					gridObject = grid.GetGridObject(hero.GetPosition());
+					gridObject.SetIsValidMovePosition(true);
+					gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, true);
+					PaintArrowTool(hero.GetPosition(), hero.GetTargetPosition());
+					gridObject.SetIsValidMovePosition(false);
+					gridPathfinding.SetWalkable(gridObject.gridX, gridObject.gridY, false);
 				}
 			}
+		}
+
+		private void UpdateHeroStep() {
+			if(state_ != GameState.Executing) {
+				return;
+			}
+			ResetHeroVisual();
+			Tilemap.Node gridObject;
+			foreach(Unit hero in heroes_) {
+				gridObject = grid.GetGridObject(hero.GetPosition());
+				gridObject.ClearUnitGridCombat();
+				SetHeroTile(hero);
+				hero.MoveTo(hero.GetTargetPosition());
+				gridObject = grid.GetGridObject(hero.GetPosition());
+				gridObject.SetUnitGridCombat(hero);
+			}
+			UpdateValidMovePositions();
+			ResetMoveTiles();
+		}
+
+		private bool AllHeroesFinished() {
+			foreach(Unit hero in heroes_) {
+				if(hero.pathRoute_.Count > 1) {
+					return false;
+				}
+			}
+			return true;
 		}
 	}
 }
